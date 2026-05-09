@@ -22,7 +22,7 @@ ScholarMind is a globally deployed, multi-agent AI research synthesis platform. 
 - **Backend**: FastAPI, Python 3.10+, Uvicorn.
 - **AI/LLM**: Claude 3.5 Sonnet (via Anthropic API).
 - **Research Data**: Semantic Scholar API.
-- **Deployment**: Vercel (Frontend), Railway (Backend).
+- **Deployment**: Netlify (Frontend), Railway (Backend).
 
 ---
 
