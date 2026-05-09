@@ -5,8 +5,8 @@ Run with: uvicorn main:app --reload --port 8000
 
 Modes:
   - Demo mode: runs fully without API keys using mock data
-  - Real mode: uses CrewAI agents (Semantic Scholar + Google Gemini / Claude)
-                when ANTHROPIC_API_KEY or GOOGLE_API_KEY is set
+  - Real mode: uses CrewAI agents (Semantic Scholar + OpenAI GPT-4o)
+                when OPENAI_API_KEY is set
 """
 
 import asyncio
@@ -48,13 +48,11 @@ app.add_middleware(
 )
 
 # ── Check if real AI mode is available ────────────────────────────────
-ANTHROPIC_KEY = os.getenv("ANTHROPIC_API_KEY", "")
-GOOGLE_KEY = os.getenv("GOOGLE_API_KEY", "")
+OPENAI_KEY = os.getenv("OPENAI_API_KEY", "")
 SEMANTIC_SCHOLAR_KEY = os.getenv("SEMANTIC_SCHOLAR_API_KEY", "")
 
-# CrewAI uses Google Gemini by default if GOOGLE_API_KEY is set,
-# otherwise falls back to OPENAI_API_KEY. We support Anthropic too.
-REAL_AI_MODE = bool(ANTHROPIC_KEY and not ANTHROPIC_KEY.startswith("sk-ant-api03-xx")) or bool(GOOGLE_KEY)
+# CrewAI natively uses OPENAI_API_KEY — real mode activates when the key is set.
+REAL_AI_MODE = bool(OPENAI_KEY and not OPENAI_KEY.startswith("sk-proj-xx"))
 
 # ── In-memory session store (replace with Supabase in production) ─────
 sessions_store: dict = {}
@@ -389,20 +387,20 @@ async def start_synthesis(session_id: str):
             )
 
         except Exception as e:
-            print(f"[ERROR] CrewAI synthesis failed: {e}. Falling back to Claude direct synthesis.")
+            print(f"[ERROR] CrewAI synthesis failed: {e}. Falling back to OpenAI direct synthesis.")
 
-            # Fallback: direct Claude synthesis without agents
+            # Fallback: direct OpenAI GPT-4o synthesis without agents
             try:
-                import anthropic as ant
-                client = ant.Anthropic(api_key=ANTHROPIC_KEY)
+                from openai import OpenAI
+                client = OpenAI(api_key=OPENAI_KEY)
                 all_papers = session.get("papers", MOCK_PAPERS)
                 paper_context = "\n\n".join([
                     f"Title: {p.get('title', '')}\nAuthors: {', '.join(p.get('authors', []))}\n"
                     f"Year: {p.get('year', '')}\nAbstract: {p.get('abstract', '')}"
                     for p in all_papers[:10]
                 ])
-                message = client.messages.create(
-                    model="claude-sonnet-4-5",
+                response = client.chat.completions.create(
+                    model="gpt-4o",
                     max_tokens=4000,
                     messages=[{
                         "role": "user",
@@ -415,9 +413,9 @@ Structure: Abstract, Introduction, Background, Methodology Analysis, Research Ga
 Use academic style with inline citations [1], [2] etc. Minimum 1500 words."""
                     }]
                 )
-                survey_content = message.content[0].text
-            except Exception as claude_err:
-                print(f"[ERROR] Claude fallback also failed: {claude_err}. Using mock survey.")
+                survey_content = response.choices[0].message.content
+            except Exception as openai_err:
+                print(f"[ERROR] OpenAI fallback also failed: {openai_err}. Using mock survey.")
                 survey_content = MOCK_SURVEY
     else:
         # Demo mode
