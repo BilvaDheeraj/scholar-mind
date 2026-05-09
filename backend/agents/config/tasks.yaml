@@ -1,0 +1,151 @@
+research_task:
+  description: >
+    You have access to the "Semantic Scholar Paper Fetcher" tool.
+    Use it to fetch real, peer-reviewed, open-access papers about `{interest}`.
+
+    Call the tool with:
+      - interest: "{interest}"
+      - num_papers: {num_papers}
+      - session_id: "{session_id}"
+
+    The tool will automatically:
+      - Query Semantic Scholar for open-access papers
+      - Filter out preprints (arXiv, bioRxiv, medRxiv, SSRN)
+      - Deduplicate by title
+      - Validate abstracts (null if missing or <50 chars)
+      - Save the results to outputs/{session_id}_abstracts.json
+
+    After calling the tool, review the returned JSON and report a summary of the papers found.
+
+    IMPORTANT:
+      - You MUST call the tool. Do not write or run any Python code yourself.
+      - Do NOT fabricate, invent, or hallucinate any paper titles, authors, abstracts, or URLs.
+      - All paper data must come directly from what the tool returns.
+
+  expected_output: >
+    A summary confirming the tool was called successfully, listing the real papers found
+    (title, year, venue, peer_reviewed status), and confirming that outputs/{session_id}_abstracts.json was saved.
+  agent: semantic_scholar_agent
+
+
+intro_scope_task:
+  description: >
+    You have been given the following academic papers about "{interest}":
+
+    {papers_json}
+
+    Using the above papers, write the Introduction & Scope section of a comprehensive survey paper in Markdown.
+    Include:
+      - Background & motivation for studying {interest}
+      - Historical context and evolution of the field
+      - Importance and real-world relevance
+      - Clearly defined survey scope and research questions
+    This should be well-written, academic in tone, and approximately 400-600 words.
+  expected_output: >
+    A well-structured Markdown Introduction & Scope section (400-600 words).
+  agent: intro_scope_agent
+
+
+dataset_task:
+  description: >
+    You have been given the following academic papers about "{interest}":
+
+    {papers_json}
+
+    Using the above papers, extract and summarize all datasets mentioned.
+    For each dataset, provide:
+      - Name, Size, Modality, Source URL (if available), Use-case
+      - Any known limitations (bias, size constraints, availability)
+    Present this as a clearly formatted Markdown section with a summary table.
+    If datasets are not explicitly mentioned, note the typical datasets used in this research area.
+  expected_output: >
+    A Markdown section summarizing datasets with a formatted table and limitations.
+  agent: dataset_agent
+
+
+methods_results_task:
+  description: >
+    You have been given the following academic papers about "{interest}":
+
+    {papers_json}
+
+    Analyze and summarize the methodologies and results from these papers.
+    For each paper, extract:
+      - Method category (ML, Deep Learning, Signal Processing, Hybrid, etc.)
+      - Key algorithms or models used
+      - Performance metrics and key results
+      - Strengths and weaknesses
+    Generate comparison tables and a taxonomy in Markdown format.
+  expected_output: >
+    A Markdown section with methodology summaries, comparison tables, and key findings.
+  agent: methods_results_agent
+
+
+challenges_gaps_future_task:
+  description: >
+    You have been given the following academic papers about "{interest}":
+
+    {papers_json}
+
+    Critically analyze the papers and identify:
+      1. Current challenges and limitations in the field
+      2. Open research gaps not yet addressed
+      3. Promising future research directions and applications
+    Produce a structured Markdown section with clear subsections for each category.
+  expected_output: >
+    A Markdown section with challenges, gaps, and future directions (300-500 words).
+  agent: challenges_gaps_future_agent
+
+
+conclusion_references_task:
+  description: >
+    You have been given the following academic papers about "{interest}":
+
+    {papers_json}
+
+    Write the conclusion of the survey that:
+      - Summarizes the key findings across all papers
+      - Highlights the most important contributions
+      - Reinforces the significance of the research area
+
+    Then generate a numbered reference list in APA format using:
+      Author(s) (Year). Title. Venue/Journal. [URL if available]
+  expected_output: >
+    A Markdown Conclusion section followed by a numbered References list.
+  agent: conclusion_references_agent
+
+
+merge_task:
+  description: >
+    You are given the following sections of a survey paper about "{interest}":
+
+    == INTRODUCTION & SCOPE ==
+    {intro_scope}
+
+    == DATASETS ==
+    {datasets}
+
+    == METHODS & RESULTS ==
+    {methods_results}
+
+    == CHALLENGES, GAPS & FUTURE ==
+    {challenges_gaps_future}
+
+    == CONCLUSION & REFERENCES ==
+    {conclusion_references}
+
+    Merge all of the above into a single, polished, publication-quality Markdown survey.
+    Structure:
+      # [Title]: A Comprehensive Survey
+      ## Abstract
+      ## 1. Introduction & Scope
+      ## 2. Datasets
+      ## 3. Methodology & Results
+      ## 4. Challenges, Gaps & Future Directions
+      ## 5. Conclusion
+      ## References
+
+    Ensure smooth transitions between sections, consistent formatting, and academic tone throughout.
+  expected_output: >
+    A single complete Markdown survey document ready for publication.
+  agent: merger_agent

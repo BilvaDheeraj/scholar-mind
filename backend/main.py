@@ -2,12 +2,17 @@
 ScholarMind FastAPI Backend
 ============================
 Run with: uvicorn main:app --reload --port 8000
-Demo mode: runs fully without API keys using mock data
+
+Modes:
+  - Demo mode: runs fully without API keys using mock data
+  - Real mode: uses CrewAI agents (Semantic Scholar + Google Gemini / Claude)
+                when ANTHROPIC_API_KEY or GOOGLE_API_KEY is set
 """
 
 import asyncio
 import json
 import os
+import sys
 import uuid
 from datetime import datetime
 from typing import AsyncGenerator, List, Optional
@@ -20,27 +25,41 @@ from pydantic import BaseModel
 
 load_dotenv()
 
-# ─── App setup ─────────────────────────────────────────────────────
+# ── Ensure 'backend/' is on sys.path so `agents.*` imports resolve ────
+_BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
+if _BACKEND_DIR not in sys.path:
+    sys.path.insert(0, _BACKEND_DIR)
+
+# ── App setup ─────────────────────────────────────────────────────────
 app = FastAPI(
     title="ScholarMind API",
-    description="AI Research Synthesis Platform Backend",
-    version="1.0.0",
+    description="AI Research Synthesis Platform Backend — powered by CrewAI multi-agents",
+    version="2.0.0",
 )
 
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[FRONTEND_URL, "https://scholarmind.ai"],
+    allow_origins=[FRONTEND_URL, "https://scholarmind.netlify.app", "http://localhost:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# ─── In-memory store (replace with Supabase in production) ─────────
+# ── Check if real AI mode is available ────────────────────────────────
+ANTHROPIC_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+GOOGLE_KEY = os.getenv("GOOGLE_API_KEY", "")
+SEMANTIC_SCHOLAR_KEY = os.getenv("SEMANTIC_SCHOLAR_API_KEY", "")
+
+# CrewAI uses Google Gemini by default if GOOGLE_API_KEY is set,
+# otherwise falls back to OPENAI_API_KEY. We support Anthropic too.
+REAL_AI_MODE = bool(ANTHROPIC_KEY and not ANTHROPIC_KEY.startswith("sk-ant-api03-xx")) or bool(GOOGLE_KEY)
+
+# ── In-memory session store (replace with Supabase in production) ─────
 sessions_store: dict = {}
 
-# ─── Models ────────────────────────────────────────────────────────
+# ── Models ────────────────────────────────────────────────────────────
 class CreateSessionRequest(BaseModel):
     query: str
     paper_count: int = 10
@@ -64,7 +83,7 @@ class UpdatePapersRequest(BaseModel):
     paper_ids: List[str]
 
 
-# ─── Mock data ─────────────────────────────────────────────────────
+# ── Mock data (demo mode) ─────────────────────────────────────────────
 MOCK_PAPERS = [
     Paper(
         id="p1", title="Highly Accurate Protein Structure Prediction with AlphaFold",
@@ -103,31 +122,25 @@ MOCK_PAPERS = [
     ),
 ]
 
-AGENT_STEPS = [
-    "Data Acquisition",
-    "Context Setting",
-    "Dataset Extraction",
-    "Methodology Analysis",
-    "Gap & Challenges",
-    "Conclusion & References",
-    "Final Assembly",
-]
-
 MOCK_SURVEY = """# Advances in Deep Learning: A Comprehensive Survey
 
 ## Abstract
 
 This survey synthesizes recent advances in deep learning, examining architectural innovations from residual networks through transformer-based models. We analyze 5 seminal papers and identify key research trajectories.
 
-## 1. Introduction
+## 1. Introduction & Scope
 
 The past decade has witnessed unprecedented advances in deep learning, driven by three co-evolving forces: architectural innovation, scale, and data availability.
 
-## 2. Background
+## 2. Datasets
 
-From ResNets enabling extremely deep networks to the Transformer's attention-only paradigm, the field has undergone multiple paradigm shifts.
+| Dataset | Modality | Use-case |
+|---------|----------|----------|
+| ImageNet | Images | Visual recognition benchmarks |
+| BooksCorpus | Text | Language model pre-training |
+| Protein Data Bank | 3D structures | Protein structure prediction |
 
-## 3. Methodology Analysis
+## 3. Methodology & Results
 
 ### 3.1 Attention Mechanisms
 The self-attention operation allows models to capture long-range dependencies without the sequential bottleneck of RNNs.
@@ -135,7 +148,7 @@ The self-attention operation allows models to capture long-range dependencies wi
 ### 3.2 Pre-training at Scale
 BERT and GPT-3 demonstrate that large-scale pre-training followed by fine-tuning or in-context learning is a dominant paradigm.
 
-## 4. Research Gaps
+## 4. Challenges, Gaps & Future Directions
 
 - Mechanistic interpretability of large models
 - Sample efficiency in low-data regimes
@@ -154,12 +167,27 @@ Deep learning has reached remarkable capability across modalities. Future work m
 [5] He et al. (2016). ResNet. *CVPR*.
 """
 
+AGENT_STEPS = [
+    {"key": "data_acquisition", "label": "Data Acquisition"},
+    {"key": "intro_scope", "label": "Introduction & Scope"},
+    {"key": "dataset_extraction", "label": "Dataset Extraction"},
+    {"key": "methodology_analysis", "label": "Methodology Analysis"},
+    {"key": "gaps_challenges", "label": "Gaps & Challenges"},
+    {"key": "conclusion_references", "label": "Conclusion & References"},
+    {"key": "final_assembly", "label": "Final Assembly"},
+]
 
-# ─── Routes ────────────────────────────────────────────────────────
+
+# ── Routes ────────────────────────────────────────────────────────────
 
 @app.get("/api/health")
 async def health():
-    return {"status": "ok", "service": "ScholarMind API", "version": "1.0.0"}
+    return {
+        "status": "ok",
+        "service": "ScholarMind API",
+        "version": "2.0.0",
+        "mode": "real_ai" if REAL_AI_MODE else "demo",
+    }
 
 
 @app.post("/api/sessions")
@@ -194,42 +222,91 @@ async def get_session(session_id: str):
 
 @app.post("/api/sessions/{session_id}/papers/fetch")
 async def fetch_papers(session_id: str):
-    """Fetch papers from Semantic Scholar (or return mock data in demo mode)."""
+    """
+    Fetch papers from Semantic Scholar via the CrewAI custom tool logic,
+    or return mock data in demo mode.
+    """
     session = sessions_store.get(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    semantic_scholar_key = os.getenv("SEMANTIC_SCHOLAR_API_KEY")
+    if SEMANTIC_SCHOLAR_KEY or REAL_AI_MODE:
+        # Use the real Semantic Scholar python client (same logic as agents/tools/custom_tool.py)
+        try:
+            from semanticscholar import SemanticScholar
+            from itertools import islice
 
-    if semantic_scholar_key:
-        # Real API call
-        import httpx
-        query = session["query"]
-        url = "https://api.semanticscholar.org/graph/v1/paper/search"
-        params = {
-            "query": query,
-            "fields": "title,authors,year,venue,abstract,isOpenAccess,externalIds",
-            "limit": session["paper_count"],
-        }
-        headers = {"x-api-key": semantic_scholar_key}
-        async with httpx.AsyncClient() as client:
-            resp = await client.get(url, params=params, headers=headers)
-            data = resp.json()
-            papers = [
-                {
-                    "id": p["paperId"],
-                    "title": p.get("title", ""),
-                    "authors": [a["name"] for a in p.get("authors", [])],
-                    "year": p.get("year", 0),
-                    "journal": p.get("venue", ""),
-                    "abstract": p.get("abstract", ""),
-                    "is_open_access": p.get("isOpenAccess", False),
-                    "semantic_scholar_id": p["paperId"],
-                }
-                for p in data.get("data", [])
-            ]
+            sch = SemanticScholar()
+            query = session["query"]
+            num = session["paper_count"]
+            blacklist = ["arxiv", "biorxiv", "medrxiv", "ssrn"]
+
+            def is_peer_reviewed(venue: str) -> bool:
+                return not any(b in (venue or "").lower() for b in blacklist)
+
+            results = sch.search_paper(query, open_access_pdf=True, limit=num * 4)
+            papers = []
+            seen = set()
+
+            for p in islice(results, num * 4):
+                if len(papers) >= num:
+                    break
+                key = (p.title or "").strip().lower()
+                if key in seen:
+                    continue
+                seen.add(key)
+                if not is_peer_reviewed(p.venue):
+                    continue
+                abstract = p.abstract
+                if not abstract or len(abstract.strip()) < 50:
+                    abstract = "Abstract not available."
+                oa_pdf = p.openAccessPdf
+                oa_url = oa_pdf.get("url") if isinstance(oa_pdf, dict) else None
+                papers.append({
+                    "id": p.paperId or str(uuid.uuid4()),
+                    "title": p.title or "Untitled",
+                    "authors": [a.name for a in (p.authors or [])],
+                    "year": p.year or 0,
+                    "journal": p.venue or "",
+                    "abstract": abstract,
+                    "is_open_access": bool(oa_url),
+                    "is_preprint": False,
+                    "semantic_scholar_id": p.paperId,
+                    "openaccess_url": oa_url,
+                })
+
+            # Fallback: include preprints if not enough results
+            if len(papers) < num:
+                results2 = sch.search_paper(query, open_access_pdf=True, limit=num * 4)
+                for p in islice(results2, num * 4):
+                    if len(papers) >= num:
+                        break
+                    key = (p.title or "").strip().lower()
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    abstract = p.abstract or "Abstract not available."
+                    oa_pdf = p.openAccessPdf
+                    oa_url = oa_pdf.get("url") if isinstance(oa_pdf, dict) else None
+                    papers.append({
+                        "id": p.paperId or str(uuid.uuid4()),
+                        "title": p.title or "Untitled",
+                        "authors": [a.name for a in (p.authors or [])],
+                        "year": p.year or 0,
+                        "journal": p.venue or "",
+                        "abstract": abstract,
+                        "is_open_access": bool(oa_url),
+                        "is_preprint": True,
+                        "semantic_scholar_id": p.paperId,
+                        "openaccess_url": oa_url,
+                    })
+
+        except Exception as e:
+            # Graceful fallback to mock data on any Semantic Scholar error
+            print(f"[WARN] Semantic Scholar fetch failed: {e}. Using mock data.")
+            papers = [p.model_dump() for p in MOCK_PAPERS]
     else:
-        # Demo mode — return mock papers
+        # Demo mode
         papers = [p.model_dump() for p in MOCK_PAPERS]
 
     sessions_store[session_id]["papers"] = papers
@@ -254,25 +331,21 @@ async def stream_progress(session_id: str):
 
     async def event_generator() -> AsyncGenerator[str, None]:
         for i, step in enumerate(AGENT_STEPS):
-            # Emit start event
             event = {
-                "step": step.lower().replace(" ", "_"),
-                "step_label": step,
+                "step": step["key"],
+                "step_label": step["label"],
                 "status": "active",
                 "progress": int((i / len(AGENT_STEPS)) * 100),
-                "thought": f"Processing {step}...",
+                "thought": f"Agent working on: {step['label']}...",
             }
             yield f"data: {json.dumps(event)}\n\n"
             await asyncio.sleep(2.5)
 
-            # Emit completion
             event["status"] = "completed"
             event["progress"] = int(((i + 1) / len(AGENT_STEPS)) * 100)
             yield f"data: {json.dumps(event)}\n\n"
             await asyncio.sleep(0.5)
 
-        # Final done event
-        sessions_store.get(session_id, {}).update({"status": "completed", "survey": MOCK_SURVEY})
         yield f'data: {{"status": "done", "progress": 100}}\n\n'
 
     return StreamingResponse(
@@ -284,41 +357,71 @@ async def stream_progress(session_id: str):
 
 @app.post("/api/sessions/{session_id}/synthesize")
 async def start_synthesis(session_id: str):
+    """
+    Run the CrewAI multi-agent synthesis pipeline.
+    Uses pre-selected papers from the session so users can curate before generating.
+    """
     session = sessions_store.get(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    anthropic_key = os.getenv("ANTHROPIC_API_KEY")
+    sessions_store[session_id]["status"] = "synthesizing"
 
-    if anthropic_key:
-        # Real synthesis with Claude
-        import anthropic as ant
+    if REAL_AI_MODE:
+        try:
+            from agents.crew import run_synthesis_crew
 
-        client = ant.Anthropic(api_key=anthropic_key)
-        papers = session.get("papers", MOCK_PAPERS)
-        paper_context = "\n\n".join([
-            f"Title: {p.get('title', '')}\nAuthors: {', '.join(p.get('authors', []))}\nYear: {p.get('year', '')}\nAbstract: {p.get('abstract', '')}"
-            for p in papers[:10]
-        ])
+            # Build the papers list from the selected IDs
+            all_papers = session.get("papers", [])
+            selected_ids = set(session.get("selected_paper_ids", [p["id"] for p in all_papers]))
+            selected_papers = [p for p in all_papers if p.get("id") in selected_ids]
 
-        message = client.messages.create(
-            model="claude-sonnet-4-5",
-            max_tokens=4000,
-            messages=[{
-                "role": "user",
-                "content": f"""Write a comprehensive academic survey paper on: "{session['query']}"
+            if not selected_papers:
+                selected_papers = all_papers
+
+            # Run the crew in a thread pool so it doesn't block the event loop
+            survey_content = await asyncio.to_thread(
+                run_synthesis_crew,
+                interest=session["query"],
+                papers=selected_papers,
+                session_id=session_id,
+                num_papers=len(selected_papers),
+            )
+
+        except Exception as e:
+            print(f"[ERROR] CrewAI synthesis failed: {e}. Falling back to Claude direct synthesis.")
+
+            # Fallback: direct Claude synthesis without agents
+            try:
+                import anthropic as ant
+                client = ant.Anthropic(api_key=ANTHROPIC_KEY)
+                all_papers = session.get("papers", MOCK_PAPERS)
+                paper_context = "\n\n".join([
+                    f"Title: {p.get('title', '')}\nAuthors: {', '.join(p.get('authors', []))}\n"
+                    f"Year: {p.get('year', '')}\nAbstract: {p.get('abstract', '')}"
+                    for p in all_papers[:10]
+                ])
+                message = client.messages.create(
+                    model="claude-sonnet-4-5",
+                    max_tokens=4000,
+                    messages=[{
+                        "role": "user",
+                        "content": f"""Write a comprehensive academic survey paper on: "{session['query']}"
 
 Based on these papers:
 {paper_context}
 
 Structure: Abstract, Introduction, Background, Methodology Analysis, Research Gaps, Conclusions, References.
 Use academic style with inline citations [1], [2] etc. Minimum 1500 words."""
-            }]
-        )
-        survey_content = message.content[0].text
+                    }]
+                )
+                survey_content = message.content[0].text
+            except Exception as claude_err:
+                print(f"[ERROR] Claude fallback also failed: {claude_err}. Using mock survey.")
+                survey_content = MOCK_SURVEY
     else:
         # Demo mode
-        await asyncio.sleep(1)
+        await asyncio.sleep(2)
         survey_content = MOCK_SURVEY
 
     sessions_store[session_id]["survey"] = survey_content

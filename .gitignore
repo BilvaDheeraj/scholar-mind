@@ -28,9 +28,6 @@ yarn-error.log*
 # local env files
 .env*.local
 
-# vercel
-.vercel
-
 # typescript
 *.tsbuildinfo
 next-env.d.ts
@@ -38,6 +35,21 @@ next-env.d.ts
 # backend
 backend/__pycache__/
 backend/venv/
+backend/.venv/
 backend/.env
 backend/*.pyc
 backend/.pytest_cache/
+
+# Agent outputs (session files) — keep the directory, ignore generated files
+backend/outputs/*.json
+backend/outputs/*.md
+!backend/outputs/.gitkeep
+
+# CrewAI internal cache
+backend/.crewai/
+**/__pycache__/
+**/*.pyc
+
+# Extracted zip (not part of the project source)
+Draft_1_goog_extracted/
+Draft_1_goog.zip
