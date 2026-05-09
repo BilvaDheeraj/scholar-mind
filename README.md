@@ -20,7 +20,7 @@ ScholarMind is a globally deployed, multi-agent AI research synthesis platform. 
 
 - **Frontend**: Next.js 14 (App Router), Tailwind CSS, Framer Motion, Lucide Icons.
 - **Backend**: FastAPI, Python 3.10+, Uvicorn.
-- **AI/LLM**: Claude 3.5 Sonnet (via Anthropic API).
+- **AI/LLM**: GPT-4o (via OpenAI API) and CrewAI Agents.
 - **Research Data**: Semantic Scholar API.
 - **Deployment**: Netlify (Frontend), Railway (Backend).
 
@@ -32,7 +32,7 @@ ScholarMind is a globally deployed, multi-agent AI research synthesis platform. 
 
 - Node.js 18+
 - Python 3.10+
-- Anthropic API Key (for synthesis)
+- OpenAI API Key (for synthesis)
 - Semantic Scholar API Key (optional, for higher rate limits)
 
 ### 2. Clone and Install
@@ -84,7 +84,7 @@ Create a `.env.local` in the `scholar-mind` directory:
 
 ```env
 NEXT_PUBLIC_BACKEND_URL=http://localhost:8000
-ANTHROPIC_API_KEY=your_key_here
+OPENAI_API_KEY=your_key_here
 SEMANTIC_SCHOLAR_API_KEY=your_key_here
 ```
 
