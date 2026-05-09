@@ -1,36 +1,114 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 🧠 ScholarMind
 
-## Getting Started
+**From question to insight — in minutes.**
 
-First, run the development server:
+ScholarMind is a globally deployed, multi-agent AI research synthesis platform. It orchestrates a team of specialized AI agents to convert complex research questions into structured, peer-reviewed surveys, synthesising literature from millions of papers via the Semantic Scholar API.
+
+---
+
+## ✨ Features
+
+- **Autonomous Research Agents**: 7-phase synthesis lifecycle from query to final assembly.
+- **Real-time Synthesis**: Live "thought stream" and status updates via Server-Sent Events (SSE).
+- **Interactive Visualization**: D3-based Knowledge Graphs of research themes and connections.
+- **Paper Selection**: Human-in-the-loop interface to refine the research corpus.
+- **Production Ready**: Fully type-safe, accessible, and optimized for speed.
+
+---
+
+## 🛠 Tech Stack
+
+- **Frontend**: Next.js 14 (App Router), Tailwind CSS, Framer Motion, Lucide Icons.
+- **Backend**: FastAPI, Python 3.10+, Uvicorn.
+- **AI/LLM**: Claude 3.5 Sonnet (via Anthropic API).
+- **Research Data**: Semantic Scholar API.
+- **Deployment**: Vercel (Frontend), Railway (Backend).
+
+---
+
+## 🚀 Getting Started
+
+### 1. Prerequisites
+
+- Node.js 18+
+- Python 3.10+
+- Anthropic API Key (for synthesis)
+- Semantic Scholar API Key (optional, for higher rate limits)
+
+### 2. Clone and Install
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+git clone https://github.com/your-repo/scholar-mind.git
+cd scholar-mind
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 3. Frontend Setup
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+# Navigate to frontend directory (if not already there)
+cd scholar-mind
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+# Install dependencies
+npm install
 
-## Learn More
+# Setup environment variables
+cp .env.example .env.local
+# Edit .env.local with your keys
 
-To learn more about Next.js, take a look at the following resources:
+# Run development server
+npm run dev
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### 4. Backend Setup
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+# Open a new terminal
+cd scholar-mind/backend
 
-## Deploy on Vercel
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+# Install dependencies
+pip install -r requirements.txt
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+# Run backend server
+uvicorn main:app --reload --port 8000
+```
+
+---
+
+## ⚙️ Environment Variables
+
+Create a `.env.local` in the `scholar-mind` directory:
+
+```env
+NEXT_PUBLIC_BACKEND_URL=http://localhost:8000
+ANTHROPIC_API_KEY=your_key_here
+SEMANTIC_SCHOLAR_API_KEY=your_key_here
+```
+
+---
+
+## 🏗 Architecture
+
+1. **Query Phase**: Intelligent research question formulation.
+2. **Selection Phase**: Semantic Scholar fetching & user-curated paper selection.
+3. **Synthesis Phase**: 
+   - **Data Acquisition Agent**: Fetches full contexts.
+   - **Analysis Agent**: Clusters themes and methodologies.
+   - **Drafting Agent**: Generates structured survey content.
+4. **Output Phase**: Markdown rendering with interactive citations and PDF export.
+
+---
+
+## 🎨 Design Aesthetic
+
+ScholarMind follows the **"Dark Matter Luxury"** design system:
+- **Typography**: Instrument Serif (Display) & Inter (Body).
+- **Colors**: Deep obsidian backgrounds, electric blue accents, and glassmorphic surfaces.
+- **Animations**: Spring-based micro-interactions using Framer Motion.
+
+---
+
+Built with ❤️ for the world's researchers.
